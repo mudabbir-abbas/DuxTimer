@@ -2,6 +2,8 @@
 
 Quick Timer adds countdown timers, clock alarms, and a stopwatch to Dux Modular Shell (DMS). Active timers appear in the bar, and an alert notifies you when a timer or alarm finishes.
 
+This plugin was made with AI assistance. This repository exists primarily to provide DMS with a Git source for plugin updates.
+
 ## Requirements
 
 - DMS 1.5.0 or newer
