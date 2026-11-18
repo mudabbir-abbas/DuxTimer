@@ -1,0 +1,19 @@
+{
+  "id": "duxTimer",
+  "name": "Quick Timer",
+  "description": "Countdown timer, alarm, and stopwatch that only shows in the bar while active and notifies when it finishes",
+  "version": "0.2.0",
+  "author": "you",
+  "icon": "timer",
+  "type": "composite",
+  "capabilities": ["daemon", "dankbar-widget", "launcher"],
+  "components": {
+    "daemon": "./TimerDaemon.qml",
+    "widget": "./TimerWidget.qml",
+    "launcher": "./TimerLauncher.qml"
+  },
+  "trigger": "quick",
+  "settings": "./TimerSettings.qml",
+  "permissions": ["settings_read", "settings_write", "process"],
+  "requires_dms": ">=1.5.0"
+}
