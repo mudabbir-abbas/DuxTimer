@@ -37,9 +37,11 @@ QtObject {
             matchedLen = re.lastIndex
             const val = parseFloat(m[1])
             const mult = unitMultiplier(m[2])
-            if (!(val >= 0) || mult === 0)
+            if (!Number.isFinite(val) || !(val >= 0) || mult === 0)
                 return 0
             total += val * mult
+            if (!Number.isFinite(total))
+                return 0
         }
         return matchedLen === s.length && matchedLen > 0 ? total : 0
     }
@@ -54,6 +56,8 @@ QtObject {
             const tok = parts[idx]
             if (numRe.test(tok)) {
                 const val = parseFloat(tok)
+                if (!Number.isFinite(val))
+                    break
                 const nextMult = idx + 1 < parts.length ? unitMultiplier(parts[idx + 1]) : 0
                 if (nextMult > 0) {
                     totalSec += val * nextMult
@@ -81,7 +85,7 @@ QtObject {
         let label = parts.slice(idx).join(" ")
         label = label.replace(/[\"']/g, "").trim()
         return {
-            seconds: Math.round(totalSec),
+            seconds: Number.isFinite(totalSec) ? Math.round(totalSec) : 0,
             label: label
         }
     }

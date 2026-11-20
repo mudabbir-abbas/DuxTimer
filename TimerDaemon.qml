@@ -14,6 +14,8 @@ PluginComponent {
     property string lastCmdId: ""
     readonly property bool playSound: pluginData.playSound ?? true
     readonly property int autoDismissSec: pluginData.autoDismiss ?? 30
+    readonly property double maxDateMs: 8640000000000000
+    readonly property int maxLabelLength: 200
 
     function snapshot() {
         const selected = findInstance(selectedId) || {}
@@ -39,23 +41,28 @@ PluginComponent {
         publish()
     }
     function newInstance(mode, label, extra) {
+        if (instances.length >= 100)
+            return null
         const now = Date.now()
         const item = Object.assign({
             id: now + "-" + Math.random(), mode: mode, phase: "running",
             endAt: 0, remainingMs: 0, totalMs: 0, startAt: 0,
-            accumulatedMs: 0, laps: [], label: label || "", alarmTime: ""
+            accumulatedMs: 0, laps: [], label: String(label || "").slice(0, maxLabelLength), alarmTime: ""
         }, extra || {})
+        item.alarmTime = String(item.alarmTime || "").slice(0, maxLabelLength)
         instances = instances.concat([item])
         selectedId = item.id
         publish()
         return item
     }
     function startTimer(seconds, label) {
-        if (!(seconds > 0)) return
-        newInstance("timer", label, { totalMs: seconds * 1000, endAt: Date.now() + seconds * 1000 })
+        const durationMs = Number(seconds) * 1000
+        if (!Number.isFinite(durationMs) || durationMs <= 0 || durationMs > maxDateMs - Date.now()) return
+        newInstance("timer", label, { totalMs: durationMs, endAt: Date.now() + durationMs })
     }
     function startAlarm(targetMs, label, timeStr) {
-        if (!(targetMs > Date.now())) return
+        targetMs = Number(targetMs)
+        if (!Number.isFinite(targetMs) || targetMs <= Date.now() || targetMs > maxDateMs) return
         newInstance("alarm", label, { totalMs: targetMs - Date.now(), endAt: targetMs, alarmTime: timeStr || "" })
     }
     function startStopwatch(label) {
@@ -95,9 +102,14 @@ PluginComponent {
         } else if (action === "lap" && x.mode === "stopwatch") {
             const elapsed = x.accumulatedMs + (x.phase === "running" ? Date.now() - x.startAt : 0)
             const prior = x.laps.length ? x.laps[x.laps.length - 1].totalMs : 0
-            x.laps = x.laps.concat([{ index: x.laps.length + 1, lapMs: elapsed - prior, totalMs: elapsed }])
+            const lastLap = x.laps.length ? x.laps[x.laps.length - 1] : null
+            const lastIdx = lastLap && Number.isFinite(Number(lastLap.index)) ? Number(lastLap.index) : x.laps.length
+            x.laps = x.laps.concat([{ index: lastIdx + 1, lapMs: elapsed - prior, totalMs: elapsed }]).slice(-1000)
         } else if (action === "add" && x.mode !== "stopwatch") {
-            const ms = (seconds > 0 ? seconds : 60) * 1000
+            const requested = Number(seconds)
+            const ms = (Number.isFinite(requested) && requested > 0 ? requested : 60) * 1000
+            const baseAt = x.phase === "running" ? x.endAt : Date.now() + (x.remainingMs || 0)
+            if (!Number.isFinite(ms) || ms <= 0 || ms > maxDateMs - baseAt) return
             if (x.phase === "running") x.endAt += ms
             else if (x.phase === "paused") x.remainingMs += ms
             x.totalMs += ms
@@ -176,12 +188,18 @@ PluginComponent {
             try {
                 const t = JSON.parse(saved)
                 if (Array.isArray(t.instances)) {
-                    instances = t.instances
-                    selectedId = t.selectedId || (instances.length ? instances[instances.length - 1].id : "")
+                    instances = t.instances.slice(0, 100).filter(x => x && typeof x === "object"
+                        && typeof x.id === "string" && x.id.length <= 100
+                        && ["timer", "alarm", "stopwatch"].includes(x.mode)
+                        && ["running", "paused", "ringing"].includes(x.phase))
+                    selectedId = instances.some(x => x.id === t.selectedId) ? t.selectedId : (instances.length ? instances[instances.length - 1].id : "")
                 } else if (t.phase && t.phase !== "idle") {
-                    t.id = "restored-" + Date.now()
-                    instances = [t]
-                    selectedId = t.id
+                    if (["timer", "alarm", "stopwatch"].includes(t.mode)
+                        && ["running", "paused", "ringing"].includes(t.phase)) {
+                        t.id = "restored-" + Date.now()
+                        instances = [t]
+                        selectedId = t.id
+                    }
                 }
             } catch (e) { instances = []; selectedId = "" }
         }
@@ -189,6 +207,10 @@ PluginComponent {
         const restored = []
         for (let i = 0; i < instances.length; i++) {
             let x = Object.assign({}, instances[i])
+            x.label = String(x.label || "").slice(0, maxLabelLength)
+            x.laps = Array.isArray(x.laps) ? x.laps.slice(-1000) : []
+            if (x.mode !== "stopwatch" && (!Number.isFinite(Number(x.endAt)) || Number(x.endAt) > maxDateMs))
+                continue
             if (x.phase === "running" && x.mode !== "stopwatch" && now >= x.endAt) {
                 x.phase = "ringing"; x.endAt = 0; x.ringAt = now
             }
